@@ -11,6 +11,7 @@ dependencies = [
     "pandas>=2.3.3",
     "pyyaml>=6.0.3",
     "roboflow>=1.2.11",
+    "sahi>=0.11.36",
     "seaborn>=0.13.2",
     "supervision>=0.27.0",
     "torch>=2.9.1",
