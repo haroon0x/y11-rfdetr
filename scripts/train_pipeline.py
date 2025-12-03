@@ -17,15 +17,21 @@ def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgs
         exist_ok=True,
         save=True,
         cache=False,      # Disable RAM caching to prevent system OOM
-        # Long-range/Small object optimizations
-        mixup=0.5,        # Context recommendation: 50% mixup
-        mosaic=1.0,       # Strong augmentation for context
-        copy_paste=0.3,   # Helps with small object density
+        mixup=0.1,        # Context recommendation: 50% mixup
+        mosaic=0.8,       # Strong augmentation for context
         degrees=10.0,     # Slight rotation
         box=7.5,          # Box loss gain
         cls=0.5,          # Class loss gain
         dfl=1.5,          # DFL loss gain
         workers=2,        # Reduced workers to prevent OOM/Crash on Colab
+        
+        augment=True,
+        scale=0.5,
+        translate=0.1,
+        fliplr=0.5,
+        hsv_h=0.015,
+        hsv_s=0.7,
+        hsv_v=0.4,
     )
     
     # Return path to best weights
@@ -45,7 +51,7 @@ def main():
     # 3. Merged/VTSaR (Target)
     
     # Configuration based on smoke-test
-    epochs = 1 if args.smoke_test else 100
+    epochs = 1 if args.smoke_test else 100 # Reduced to 50 for faster iteration on Colab
     imgsz = 640 if args.smoke_test else 1280
     print(f"Configuration: epochs={epochs}, imgsz={imgsz}, model={args.model}")
     

@@ -23,7 +23,7 @@ jobs:
         uses: astral-sh/setup-uv@v1
 
       - name: Generate requirements.txt
-        run: uv export --format requirements-txt > requirements.txt
+        run: python scripts/export_requirements.py
 
       - name: Commit and Push if changed
         run: |
