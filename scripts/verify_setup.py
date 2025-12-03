@@ -40,7 +40,6 @@ def main():
         "ultralytics",
         "roboflow",
         "cv2", # opencv-python
-        "rfdetr" # Check if this exists now
     ]
     all_imports_ok = all([check_import(m) for m in modules])
     

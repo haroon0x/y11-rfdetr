@@ -33,15 +33,8 @@ def filter_and_merge():
     (OUTPUT_DIR / "labels" / "train").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DIR / "labels" / "val").mkdir(parents=True, exist_ok=True)
 
-    # Create output structure for RF-DETR (merged_dataset_coco)
-    COCO_DIR = DATA_ROOT / "merged_dataset_coco"
-    (COCO_DIR / "train").mkdir(parents=True, exist_ok=True)
-    (COCO_DIR / "valid").mkdir(parents=True, exist_ok=True)
-    (COCO_DIR / "test").mkdir(parents=True, exist_ok=True)
-    
-    print("Directory structures created:")
+    print("Directory structure created:")
     print(f"  - YOLO: {OUTPUT_DIR}")
-    print(f"  - RF-DETR: {COCO_DIR} (Requires _annotations.coco.json in each subdir)")
     # 1. Iterating through each dataset
     # 2. Checking metadata for altitude (if available)
     # 3. Filtering annotations for 'person' class

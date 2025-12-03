@@ -2,7 +2,7 @@ import os
 import subprocess
 from ultralytics import YOLO
 
-def run_training_step(dataset_yaml, model_weights, project_name, epochs=50):
+def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgsz=1280):
     print(f"Starting training on {dataset_yaml} with weights {model_weights}...")
     
     model = YOLO(model_weights)
@@ -10,22 +10,41 @@ def run_training_step(dataset_yaml, model_weights, project_name, epochs=50):
     results = model.train(
         data=dataset_yaml,
         epochs=epochs,
-        imgsz=1280,
+        imgsz=imgsz,
         batch=16,
-        project="long_range_pipeline",
+        project="yolo11m_training_runs",
         name=project_name,
         exist_ok=True,
-        save=True
+        save=True,
+        # Long-range/Small object optimizations
+        mixup=0.5,        # Context recommendation: 50% mixup
+        mosaic=1.0,       # Strong augmentation for context
+        copy_paste=0.3,   # Helps with small object density
+        degrees=10.0,     # Slight rotation
+        box=7.5,          # Box loss gain
+        cls=0.5,          # Class loss gain
+        dfl=1.5,          # DFL loss gain
     )
     
     # Return path to best weights
-    return f"long_range_pipeline/{project_name}/weights/best.pt"
+    return f"yolo11m_training_runs/{project_name}/weights/best.pt"
+
+import argparse
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--smoke-test", action="store_true", help="Run a quick 1-epoch test")
+    args = parser.parse_args()
+
     # Define the sequence
     # 1. VisDrone (Base)
     # 2. NOMAD (Occlusions)
     # 3. Merged/VTSaR (Target)
+    
+    # Configuration based on smoke-test
+    epochs = 1 if args.smoke_test else 100
+    imgsz = 640 if args.smoke_test else 1280
+    print(f"Configuration: epochs={epochs}, imgsz={imgsz}")
     
     # Ensure YAMLs exist (placeholders)
     visdrone_yaml = "data/visdrone.yaml"
@@ -37,7 +56,7 @@ def main():
     # Ultralytics has built-in support for VisDrone.yaml, so we can use it directly
     # It will auto-download the dataset if not present
     try:
-        weights_step1 = run_training_step("VisDrone.yaml", "yolo11m.pt", "step1_visdrone", epochs=100)
+        weights_step1 = run_training_step("VisDrone.yaml", "yolo11m.pt", "step1_visdrone", epochs=epochs, imgsz=imgsz) # Use dynamic epochs and imgsz
     except Exception as e:
         print(f"VisDrone training failed: {e}")
         print("Falling back to base weights.")
@@ -46,7 +65,7 @@ def main():
     # Step 2: NOMAD
     print(f"\n=== Step 2: Fine-tuning on NOMAD using {weights_step1} ===")
     if os.path.exists(nomad_yaml):
-        weights_step2 = run_training_step(nomad_yaml, weights_step1, "step2_nomad", epochs=50)
+        weights_step2 = run_training_step(nomad_yaml, weights_step1, "step2_nomad", epochs=50 if not args.smoke_test else 1, imgsz=imgsz)
     else:
         print("NOMAD YAML not found, skipping Step 2.")
         weights_step2 = weights_step1
@@ -54,7 +73,7 @@ def main():
     # Step 3: Merged
     print(f"\n=== Step 3: Final training on Merged Dataset using {weights_step2} ===")
     if os.path.exists(merged_yaml):
-        final_weights = run_training_step(merged_yaml, weights_step2, "step3_merged", epochs=100)
+        final_weights = run_training_step(merged_yaml, weights_step2, "step3_merged", epochs=epochs, imgsz=imgsz)
         print(f"Pipeline complete. Final weights at: {final_weights}")
     else:
         print("Merged YAML not found. Cannot complete pipeline.")
