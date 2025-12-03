@@ -10,12 +10,13 @@ def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgs
     results = model.train(
         data=dataset_yaml,
         epochs=epochs,
-        imgsz=imgsz,
-        batch=8,          # Reduced batch size for 1280px on T4 GPU
+        imgsz=960,        # Reduced from 1280 to 960 to fix CUDA OOM (1280 is too big for T4)
+        batch=8,          # Further reduced batch size to fix CUDA OOM on T4
         project="yolo11m_training_runs",
         name=project_name,
         exist_ok=True,
         save=True,
+        cache=False,      # Disable RAM caching to prevent system OOM
         # Long-range/Small object optimizations
         mixup=0.5,        # Context recommendation: 50% mixup
         mosaic=1.0,       # Strong augmentation for context
