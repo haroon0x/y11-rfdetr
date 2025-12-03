@@ -24,6 +24,7 @@ def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgs
         box=7.5,          # Box loss gain
         cls=0.5,          # Class loss gain
         dfl=1.5,          # DFL loss gain
+        workers=2,        # Reduced workers to prevent OOM/Crash on Colab
     )
     
     # Return path to best weights
