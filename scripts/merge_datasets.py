@@ -24,6 +24,11 @@ def load_vtsar_annotations(path):
     # Placeholder: Load VTSaR annotations
     pass
 
+def load_custom_dataset(path):
+    # Placeholder: Load your new/custom dataset here
+    # This function should read your custom data and format it for merging
+    pass
+
 def filter_and_merge():
     print(f"Merging datasets with filter: class='{TARGET_CLASS}', altitude>={MIN_ALTITUDE}m")
     
@@ -35,12 +40,13 @@ def filter_and_merge():
 
     print("Directory structure created:")
     print(f"  - YOLO: {OUTPUT_DIR}")
-    # 1. Iterating through each dataset
+    # 1. Iterating through each dataset (VisDrone, NOMAD, VTSaR, AND your Custom Dataset)
     # 2. Checking metadata for altitude (if available)
     # 3. Filtering annotations for 'person' class
     # 4. Copying images and writing new label files (YOLO format)
     
     print("Merge script structure created. Requires actual data to proceed.")
+    print("NOTE: To include your new dataset, implement 'load_custom_dataset' and add it to the merge loop.")
 
 if __name__ == "__main__":
     filter_and_merge()

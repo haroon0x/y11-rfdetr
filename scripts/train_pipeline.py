@@ -34,6 +34,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--smoke-test", action="store_true", help="Run a quick 1-epoch test")
+    parser.add_argument("--model", type=str, default="yolo11m.pt", help="Model weights to start with (e.g., yolo11n.pt, yolo11m.pt)")
     args = parser.parse_args()
 
     # Define the sequence
@@ -44,7 +45,7 @@ def main():
     # Configuration based on smoke-test
     epochs = 1 if args.smoke_test else 100
     imgsz = 640 if args.smoke_test else 1280
-    print(f"Configuration: epochs={epochs}, imgsz={imgsz}")
+    print(f"Configuration: epochs={epochs}, imgsz={imgsz}, model={args.model}")
     
     # Ensure YAMLs exist (placeholders)
     visdrone_yaml = "data/visdrone.yaml"
@@ -56,11 +57,11 @@ def main():
     # Ultralytics has built-in support for VisDrone.yaml, so we can use it directly
     # It will auto-download the dataset if not present
     try:
-        weights_step1 = run_training_step("VisDrone.yaml", "yolo11m.pt", "step1_visdrone", epochs=epochs, imgsz=imgsz) # Use dynamic epochs and imgsz
+        weights_step1 = run_training_step("VisDrone.yaml", args.model, "step1_visdrone", epochs=epochs, imgsz=imgsz) # Use dynamic epochs and imgsz
     except Exception as e:
         print(f"VisDrone training failed: {e}")
         print("Falling back to base weights.")
-        weights_step1 = "yolo11m.pt"
+        weights_step1 = args.model
         
     # Step 2: NOMAD
     print(f"\n=== Step 2: Fine-tuning on NOMAD using {weights_step1} ===")
