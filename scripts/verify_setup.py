@@ -38,7 +38,6 @@ def main():
     modules = [
         "torch",
         "ultralytics",
-        "roboflow",
         "cv2", # opencv-python
     ]
     all_imports_ok = all([check_import(m) for m in modules])
