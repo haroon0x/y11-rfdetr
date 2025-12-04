@@ -3,17 +3,17 @@ import os
 
 def train_yolo():
     # Load a model
-    model = YOLO("yolo11m.pt")  # load a pretrained model (recommended for training)
+    model = YOLO("yolo11s.pt")  # load a pretrained model (recommended for training)
 
     # Train the model
     results = model.train(
-        data="data/merged_dataset.yaml",  # path to dataset YAML
+        data="data/visdrone_person/data.yaml",  # path to dataset YAML
         epochs=100,  # number of epochs to train for
         imgsz=1280,  # training image size
         batch=16,  # batch size
         patience=50,  # epochs to wait for no observable improvement for early stopping of training
         device=0,  # device to run on, i.e. device=0 or device=0,1,2,3 or device=cpu
-        project="yolo11m_long_range",  # project name
+        project="yolo11s_person",  # project name
         name="exp",  # experiment name
         exist_ok=True,  # whether to overwrite existing experiment
         pretrained=True,  # whether to use a pretrained model
@@ -21,7 +21,7 @@ def train_yolo():
         verbose=True,  # whether to print verbose output
         seed=0,  # random seed for reproducibility
         deterministic=True,  # whether to enable deterministic mode
-        single_cls=False,  # train multi-class data as single-class
+        single_cls=True,  # train multi-class data as single-class
         rect=False,  # rectangular training
         cos_lr=False,  # cosine LR scheduler
         close_mosaic=10,  # (int) disable mosaic augmentation for final epochs (0 to disable)
@@ -61,7 +61,7 @@ def train_yolo():
 
 if __name__ == "__main__":
     # Ensure data yaml exists or is created by merge script
-    if not os.path.exists("data/merged_dataset.yaml"):
-        print("Warning: data/merged_dataset.yaml not found. Please run merge_datasets.py first.")
+    if not os.path.exists("data/visdrone_person/data.yaml"):
+        print("Warning: data/visdrone_person/data.yaml not found. Please run prepare_visdrone.py first.")
     
     train_yolo()

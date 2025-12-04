@@ -1,4 +1,5 @@
 import os
+os.environ["OPENCV_HEADLESS"] = "1"
 import subprocess
 from ultralytics import YOLO
 
@@ -47,7 +48,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--smoke-test", action="store_true", help="Run a quick 1-epoch test")
-    parser.add_argument("--model", type=str, default="yolo11m.pt", help="Model weights to start with (e.g., yolo11n.pt, yolo11m.pt)")
+    parser.add_argument("--model", type=str, default="yolo11s.pt", help="Model weights to start with (e.g., yolo11n.pt, yolo11s.pt, yolo11m.pt)")
     
     # Training Hyperparameters
     parser.add_argument("--epochs", type=int, default=50, help="Number of epochs")
@@ -74,7 +75,7 @@ def main():
     # Ensure YAMLs exist (placeholders)
     visdrone_yaml = "data/visdrone.yaml"
     nomad_yaml = "data/nomad.yaml"
-    merged_yaml = "data/merged_dataset.yaml"
+    merged_yaml = "data/visdrone_person/data.yaml"
     
     # Helper to pass args cleanly
     def train_step(dataset, weights, name, epochs_override=None):
@@ -89,34 +90,40 @@ def main():
             patience=args.patience
         )
     
-    # Step 1: VisDrone
-    print("=== Step 1: Training on VisDrone ===")
+    # Step 1: VisDrone (Filtered Person Only)
+    print("=== Step 1: Training on VisDrone (Person Only) ===")
+    # Check if prepared dataset exists (created by prepare_visdrone.py)
+    if os.path.exists("data/visdrone_person/data.yaml"):
+        visdrone_data = "data/visdrone_person/data.yaml"
+    else:
+        print("Warning: Filtered VisDrone dataset not found at data/visdrone_person/data.yaml.")
+        print("Please run 'python scripts/prepare_visdrone.py' first.")
+        visdrone_data = "VisDrone.yaml"
+
     try:
-        # Ultralytics has built-in support for VisDrone.yaml
-        weights_step1 = train_step("VisDrone.yaml", args.model, "step1_visdrone")
+        weights_step1 = train_step(visdrone_data, args.model, "step1_visdrone_person")
     except Exception as e:
         print(f"VisDrone training failed: {e}")
         print("Falling back to base weights.")
         weights_step1 = args.model
         
-    # Step 2: NOMAD
-    print(f"\n=== Step 2: Fine-tuning on NOMAD using {weights_step1} ===")
-    if os.path.exists(nomad_yaml):
-        # NOMAD usually needs fewer epochs for fine-tuning if it's smaller, 
-        # but we'll stick to args.epochs or a fraction if desired. 
-        # Let's use full epochs for now as requested.
-        weights_step2 = train_step(nomad_yaml, weights_step1, "step2_nomad")
-    else:
-        print("NOMAD YAML not found, skipping Step 2.")
-        weights_step2 = weights_step1
+    # Step 2: NOMAD (Skipped for now)
+    # print(f"\n=== Step 2: Fine-tuning on NOMAD using {weights_step1} ===")
+    # if os.path.exists(nomad_yaml):
+    #     weights_step2 = train_step(nomad_yaml, weights_step1, "step2_nomad")
+    # else:
+    #     print("NOMAD YAML not found, skipping Step 2.")
+    #     weights_step2 = weights_step1
         
-    # Step 3: Merged
-    print(f"\n=== Step 3: Final training on Merged Dataset using {weights_step2} ===")
-    if os.path.exists(merged_yaml):
-        final_weights = train_step(merged_yaml, weights_step2, "step3_merged")
-        print(f"Pipeline complete. Final weights at: {final_weights}")
-    else:
-        print("Merged YAML not found. Cannot complete pipeline.")
+    # Step 3: Merged (Skipped for now)
+    # print(f"\n=== Step 3: Final training on Merged Dataset using {weights_step2} ===")
+    # if os.path.exists(merged_yaml):
+    #     final_weights = train_step(merged_yaml, weights_step2, "step3_merged")
+    #     print(f"Pipeline complete. Final weights at: {final_weights}")
+    # else:
+    #     print("Merged YAML not found. Cannot complete pipeline.")
+    
+    print(f"Step 1 complete. Best weights: {weights_step1}")
 
 if __name__ == "__main__":
     main()
