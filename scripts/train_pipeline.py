@@ -91,21 +91,20 @@ def main():
         )
     
     # Step 1: VisDrone (Filtered Person Only)
-    print("=== Step 1: Training on VisDrone (Person Only) ===")
+    print("=== Step 1: Training on VisDrone (People Only) ===")
     # Check if prepared dataset exists (created by prepare_visdrone.py)
-    if os.path.exists("data/visdrone_person/data.yaml"):
-        visdrone_data = "data/visdrone_person/data.yaml"
-    else:
-        print("Warning: Filtered VisDrone dataset not found at data/visdrone_person/data.yaml.")
+    visdrone_data = "data/visdrone_person/data.yaml"
+    if not os.path.exists(visdrone_data):
+        print("ERROR: Person-only dataset not found at data/visdrone_person/data.yaml")
         print("Please run 'python scripts/prepare_visdrone.py' first.")
-        visdrone_data = "VisDrone.yaml"
+        print("Exiting to prevent training on wrong dataset.")
+        exit(1)
 
     try:
         weights_step1 = train_step(visdrone_data, args.model, "step1_visdrone_person")
     except Exception as e:
-        print(f"VisDrone training failed: {e}")
-        print("Falling back to base weights.")
-        weights_step1 = args.model
+        print(f"Training failed: {e}")
+        exit(1)
         
     # Step 2: NOMAD (Skipped for now)
     # print(f"\n=== Step 2: Fine-tuning on NOMAD using {weights_step1} ===")

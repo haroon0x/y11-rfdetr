@@ -1,7 +1,7 @@
 [project]
 name = "y11-rfdetr"
 version = "0.1.0"
-description = "Add your description here"
+description = "YOLOv11 person-only detection training on VisDrone dataset"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -11,7 +11,7 @@ def tune_hyperparameters():
     print("This process will train the model multiple times with different settings.")
     
     model.tune(
-        data="data/visdrone.yaml", # Start with VisDrone
+        data="data/visdrone_person/data.yaml",  # Person-only dataset
         epochs=30,                 # Fewer epochs per trial for speed
         iterations=50,             # Number of trials
         optimizer="AdamW",         # Good default for transformers/modern CNNs
