@@ -8,19 +8,22 @@ def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgs
     
     model = YOLO(model_weights)
     
+    # Dynamic project naming
+    project_dir = f"{model_weights.replace('.pt', '')}_training_runs"
+
     results = model.train(
         data=dataset_yaml,
         epochs=epochs,
         imgsz=imgsz,
         batch=batch,
-        project="yolo11m_training_runs",
+        project=project_dir,
         name=project_name,
         exist_ok=True,
         amp=True,         # Enable Mixed Precision (Faster & Less Memory)
         save=True,
         patience=patience,
         cache=False,      # Disable RAM caching to prevent system OOM
-        device=0,         # Force GPU
+        # device=0,       # Removed to allow auto-detection (CPU/GPU)
         workers=workers,
         
         # Long-range/Small object optimizations
@@ -41,21 +44,21 @@ def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgs
     )
     
     # Return path to best weights
-    return f"yolo11m_training_runs/{project_name}/weights/best.pt"
+    return f"{project_dir}/{project_name}/weights/best.pt"
 
 import argparse
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--smoke-test", action="store_true", help="Run a quick 1-epoch test")
-    parser.add_argument("--model", type=str, default="yolo11s.pt", help="Model weights to start with (e.g., yolo11n.pt, yolo11s.pt, yolo11m.pt)")
+    parser.add_argument("--model", type=str, default="yolo11n.pt", help="Model weights to start with (e.g., yolo11n.pt, yolo11s.pt, yolo11m.pt)")
     
     # Training Hyperparameters
     parser.add_argument("--epochs", type=int, default=50, help="Number of epochs")
     parser.add_argument("--batch", type=int, default=8, help="Batch size (physical)")
-    parser.add_argument("--imgsz", type=int, default=960, help="Image size")
+    parser.add_argument("--imgsz", type=int, default=640, help="Image size")
     parser.add_argument("--workers", type=int, default=2, help="Number of dataloader workers")
-    parser.add_argument("--patience", type=int, default=20, help="Early stopping patience")
+    parser.add_argument("--patience", type=int, default=25, help="Early stopping patience")
     
     args = parser.parse_args()
 

@@ -3,7 +3,7 @@ import os
 
 def train_yolo():
     # Load a model
-    model = YOLO("yolo11s.pt")  # load a pretrained model (recommended for training)
+    model = YOLO("yolo11n.pt")  # load a pretrained model (recommended for training)
 
     # Train the model
     results = model.train(
