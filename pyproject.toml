@@ -5,7 +5,6 @@ description = "YOLOv11 person-only detection training on VisDrone dataset"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "matplotlib>=3.10.7",
     "numpy>=2.3.5",
     "opencv-python-headless>=4.11.0.86",
     "pandas>=2.3.3",
