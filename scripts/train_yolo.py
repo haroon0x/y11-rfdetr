@@ -1,8 +1,10 @@
+import os
+os.environ['MPLBACKEND'] = 'Agg'  # Force non-interactive backend before any matplotlib imports
+
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend to avoid Jupyter-specific backend errors
 
 from ultralytics import YOLO
-import os
 
 def train_yolo():
     # Load a model
