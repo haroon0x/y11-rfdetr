@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend to avoid Jupyter-specific backend errors
+
 from ultralytics import YOLO
 import os
 
