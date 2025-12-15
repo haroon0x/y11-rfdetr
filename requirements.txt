@@ -1,5 +1,4 @@
 # Simple requirements.txt generated from pyproject.toml
-matplotlib>=3.10.7
 numpy>=2.3.5
 opencv-python-headless>=4.11.0.86
 pandas>=2.3.3
