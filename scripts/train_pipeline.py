@@ -1,5 +1,21 @@
 import os
+import sys
+
+# Fix matplotlib backend BEFORE any imports - this is critical for Colab
+os.environ["MPLBACKEND"] = "Agg"
 os.environ["OPENCV_HEADLESS"] = "1"
+
+# Force matplotlib to use Agg backend even if already partially initialized
+if 'matplotlib' in sys.modules:
+    del sys.modules['matplotlib']
+if 'matplotlib.pyplot' in sys.modules:
+    del sys.modules['matplotlib.pyplot']
+
+import matplotlib
+matplotlib.use('Agg', force=True)
+import matplotlib.pyplot as plt
+plt.switch_backend('Agg')
+
 import subprocess
 from ultralytics import YOLO
 

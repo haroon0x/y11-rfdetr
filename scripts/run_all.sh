@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e  # Exit on error
 
+# Fix matplotlib backend for Colab/headless environments
+export MPLBACKEND=Agg
+
 echo "============================================================"
 echo "🚀 Starting Complete YOLOv11 VisDrone Pipeline"
 echo "============================================================"
@@ -27,6 +30,6 @@ uv run python scripts/prepare_visdrone_.py
 echo -e "\n🔥 Step 3: Starting Training..."
 # Using pipeline script with flexible arguments
 # Adjust --batch and --imgsz based on your GPU memory
-uv run python scripts/train_pipeline.py --epochs 40 --batch 8 --imgsz 640 --model yolo11n.pt --patience 25
+uv run python scripts/train_pipeline.py --epochs 2 --batch 8 --imgsz 640 --model yolo11n.pt 
 
 echo -e "\n✅ Pipeline execution complete!"
