@@ -1,11 +1,7 @@
 # Simple requirements.txt generated from pyproject.toml
 numpy>=2.3.5
 opencv-python-headless>=4.11.0.86
-pandas>=2.3.3
 pyyaml>=6.0.3
-sahi>=0.11.36
-seaborn>=0.13.2
-supervision>=0.27.0
 torch>=2.9.1
 torchvision>=0.24.1
 tqdm>=4.67.1
