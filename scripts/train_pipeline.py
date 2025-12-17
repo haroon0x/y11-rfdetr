@@ -19,13 +19,33 @@ plt.switch_backend('Agg')
 import subprocess
 from ultralytics import YOLO
 
-def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgsz=960, batch=8, workers=2, patience=15):
-    print(f"Starting training on {dataset_yaml} with weights {model_weights}...")
+def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgsz=640, batch=8, workers=2, patience=15, model_yaml=None):
+    """
+    Run a training step with optional custom model architecture.
     
-    model = YOLO(model_weights)
-    
-    # Dynamic project naming
-    project_dir = f"{model_weights.replace('.pt', '')}_training_runs"
+    Args:
+        dataset_yaml: Path to dataset YAML
+        model_weights: Path to pretrained weights (.pt) or model architecture (.yaml)
+        project_name: Name for this training run
+        epochs: Number of training epochs
+        imgsz: Input image size
+        batch: Batch size
+        workers: Number of dataloader workers
+        patience: Early stopping patience
+        model_yaml: Optional path to custom model YAML (e.g., P2 architecture)
+    """
+    if model_yaml:
+        # Load custom architecture from YAML, then optionally load pretrained weights
+        print(f"Loading custom architecture from {model_yaml}...")
+        model = YOLO(model_yaml)
+        if model_weights and model_weights.endswith('.pt'):
+            print(f"Transferring pretrained weights from {model_weights}...")
+            model.load(model_weights)
+        project_dir = f"{os.path.basename(model_yaml).replace('.yaml', '')}_training_runs"
+    else:
+        print(f"Starting training on {dataset_yaml} with weights {model_weights}...")
+        model = YOLO(model_weights)
+        project_dir = f"{model_weights.replace('.pt', '')}_training_runs"
 
     results = model.train(
         data=dataset_yaml,
@@ -65,9 +85,13 @@ def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgs
 import argparse
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="YOLO Training Pipeline with P2 support for small object detection")
     parser.add_argument("--smoke-test", action="store_true", help="Run a quick 1-epoch test")
-    parser.add_argument("--model", type=str, default="yolo11n.pt", help="Model weights to start with (e.g., yolo11n.pt, yolo11s.pt, yolo11m.pt)")
+    parser.add_argument("--model", type=str, default="yolo11n.pt", help="Pretrained weights (e.g., yolo11n.pt, yolo11s.pt)")
+    
+    # Model Architecture Options
+    parser.add_argument("--p2", action="store_true", help="Use P2 detection layer for small objects (loads configs/yolo11n-p2.yaml)")
+    parser.add_argument("--model-yaml", type=str, default=None, help="Custom model architecture YAML (overrides --p2)")
     
     # Training Hyperparameters
     parser.add_argument("--epochs", type=int, default=50, help="Number of epochs")
@@ -88,8 +112,15 @@ def main():
         args.epochs = 1
         args.imgsz = 640
         args.batch = 2
-        
-    print(f"Configuration: epochs={args.epochs}, imgsz={args.imgsz}, batch={args.batch}, workers={args.workers}, model={args.model}")
+    
+    # Determine model architecture
+    model_yaml = args.model_yaml
+    if args.p2 and not model_yaml:
+        model_yaml = "configs/yolo11n-p2.yaml"
+        print("🎯 Using P2 detection layer for enhanced small object detection")
+    
+    arch_info = f"architecture={model_yaml}" if model_yaml else f"weights={args.model}"
+    print(f"Configuration: epochs={args.epochs}, imgsz={args.imgsz}, batch={args.batch}, workers={args.workers}, {arch_info}")
     
     # Ensure YAMLs exist (placeholders)
     visdrone_yaml = "data/visdrone.yaml"
@@ -106,7 +137,8 @@ def main():
             imgsz=args.imgsz,
             batch=args.batch,
             workers=args.workers,
-            patience=args.patience
+            patience=args.patience,
+            model_yaml=model_yaml
         )
     
     # Step 1: VisDrone (Filtered Person Only)
