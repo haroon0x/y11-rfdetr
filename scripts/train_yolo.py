@@ -23,7 +23,7 @@ def train_yolo():
         seed=0,  # random seed for reproducibility
         deterministic=True,  # whether to enable deterministic mode
         single_cls=True,  # train multi-class data as single-class
-        rect=False,  # rectangular training
+        rect=True,  # rectangular training
         cos_lr=False,  # cosine LR scheduler
         close_mosaic=10,  # (int) disable mosaic augmentation for final epochs (0 to disable)
         resume=False,  # resume training from last checkpoint

@@ -1,9 +1,8 @@
-# Ultralytics YOLO11 with P2 detection layer for small object detection
 # Based on yolo11.yaml but with additional P2/4 detection head
 # Use case: VisDrone, UAV imagery, small person detection
 
 # Parameters
-nc: 80  # number of classes (will be overridden by data.yaml)
+nc: 1  # number of classes (will be overridden by data.yaml)
 scales:
   # [depth, width, max_channels]
   n: [0.50, 0.25, 1024]  # yolo11n-p2

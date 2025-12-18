@@ -41,6 +41,16 @@ def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgs
         if model_weights and model_weights.endswith('.pt'):
             print(f"Transferring pretrained weights from {model_weights}...")
             model.load(model_weights)
+        
+        # Absolute verification: print the model summary and check detection heads
+        print("\n" + "="*50)
+        print(f"VERIFICATION: Loaded model from {model_yaml}")
+        print(f"Detection Layers: {len(model.model.names)} classes at {len(model.model.yaml.get('head', []))} head components")
+        # In YOLO11, the 'Detect' module is usually the last component in 'head'
+        # We can also check the number of layers in the model
+        print(f"Model Layers: {len(model.model.model)}")
+        print("="*50 + "\n")
+        
         project_dir = f"{os.path.basename(model_yaml).replace('.yaml', '')}_training_runs"
     else:
         print(f"Starting training on {dataset_yaml} with weights {model_weights}...")
