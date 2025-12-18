@@ -30,6 +30,6 @@ uv run python scripts/prepare_visdrone_.py
 echo -e "\n🔥 Step 3: Starting Training..."
 # Using pipeline script with flexible arguments
 # Adjust --batch and --imgsz based on your GPU memory
-uv run python scripts/train_pipeline.py --epochs 100 --p2 --batch 8 --imgsz 960 --model yolo11n.pt 
+uv run python scripts/train_pipeline.py --epochs 100 --p2 --batch 4 --imgsz 960 --model yolo11n.pt 
 
 echo -e "\n✅ Pipeline execution complete!"
