@@ -24,12 +24,12 @@ uv run python scripts/download_visdrone.py
 
 # 3. Prepare Dataset (Filter & Merge)
 echo -e "\nRg️  Step 2: Preparing Dataset (Merging Person + Pedestrian)..."
-uv run python scripts/prepare_visdrone_.py
+uv run python scripts/prepare_visdrone.py
 
 # 4. Train Model
 echo -e "\n🔥 Step 3: Starting Training..."
 # Using pipeline script with flexible arguments
 # Adjust --batch and --imgsz based on your GPU memory
-uv run python scripts/train_pipeline.py --epochs 100 --p2 --batch 4 --imgsz 960 --model yolo11n.pt 
+uv run python scripts/train_pipeline.py --epochs 100 --p2 --batch 8 --imgsz 960 --model yolo11n.pt 
 
 echo -e "\n✅ Pipeline execution complete!"
