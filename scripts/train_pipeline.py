@@ -80,8 +80,8 @@ def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgs
         # Reduced augmentation for cleaner, high-precision detection (research-backed)
         mosaic=0.5,            # Reduced mosaic - preserves small object details
         mixup=0.0,             # Disabled - cleaner training
-        copy_paste=0.1,        # Helps with small object detection
-        degrees=8.0,           # Moderate rotation
+        copy_paste=0.3,        # Increased to 0.3 (Research: Helps with sparse aerial data)
+        degrees=8.0,           # User requested to keep this unchanged (Research suggested 90.0)
         scale=0.3,             # Reduced scaling to preserve small objects
         translate=0.1,         # Standard translation
         fliplr=0.5,            # Standard horizontal flip
@@ -89,9 +89,9 @@ def run_training_step(dataset_yaml, model_weights, project_name, epochs=50, imgs
         hsv_s=0.4,             # Reduced saturation variation
         hsv_v=0.3,             # Reduced brightness variation
         
-        # Loss function tuning for small objects (research-backed)
-        box=10.0,              # Increased box loss for better small object localization
-        cls=0.5,               # Class loss gain
+        # Loss function tuning for small objects (Research PC-YOLO11)
+        box=5.0,               # REDUCED: Research suggests 5.0 for small objects (prevents instability)
+        cls=1.0,               # INCREASED: Research suggests 2.0-4.0 for class imbalance
         dfl=1.5,               # DFL loss gain
         
         augment=True,

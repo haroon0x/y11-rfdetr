@@ -206,3 +206,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Monodepth2 (External Dependency)
+scripts/monodepth2/
+
+# Training Runs
+*_training_runs/

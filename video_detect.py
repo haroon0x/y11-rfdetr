@@ -6,13 +6,13 @@ import os
 # Check if GUI is available (for headless environments like servers or headless OpenCV)
 HEADLESS = os.environ.get("OPENCV_HEADLESS", "0") == "1"
 
-model_path = Path(r"c:\Users\User\Downloads\A8_Mini_Output\Test_2_VisDrone_2\best_75ep,960,no--p2.pt")
+model_path = Path(r"/home/cs-ai-01/Downloads/100ep,960,--p2&no--p5.pt")
 if not model_path.exists():
     model_path = Path("runs/detect/train/weights/best.pt")
 
 model = YOLO(str(model_path))
 
-video_path = Path(r"C:\Users\User\Downloads\A8_Mini_Output\2.mp4")
+video_path = Path(r"/home/cs-ai-01/Downloads/TestSetVideos/Drone1/Morning/1.1.9.mp4")
 if not video_path.exists():
     video_path = Path("2.mp4")
 
@@ -24,7 +24,7 @@ if not cap.isOpened():
 
 # Get video writer to save the output
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-output_path = Path("output/output_960_no--p2.mp4")
+output_path = Path("output/output[okutama]_960_p2_nop5.1.9.mp4")
 output_path.parent.mkdir(parents=True, exist_ok=True)
 out = cv2.VideoWriter(str(output_path), fourcc, 20.0, (int(cap.get(3)), int(cap.get(4))))
 
