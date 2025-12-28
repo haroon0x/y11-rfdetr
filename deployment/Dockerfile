@@ -8,8 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PATH="/root/.local/bin:$PATH" \
     CMAKE_ARGS="-DWITH_GSTREAMER=ON" \
-    ENABLE_CONTRIB=0 \
-    ENABLE_HEADLESS=1
+    ENABLE_CONTRIB=0 
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgstreamer1.0-dev \
