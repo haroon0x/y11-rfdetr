@@ -1,0 +1,53 @@
+# Dockerfile for Jetson Nano Deployment
+# Supports: GStreamer, Ultralytics, Pymavlink, OpenCV-python
+# Optimization: TensorRT on JetPack 4.6 (Jetson Nano)
+
+# Use the official Ultralytics Jetson image for JetPack 4
+FROM ultralytics/ultralytics:latest-jetson-jetpack4
+
+# Set non-interactive installation and path
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PATH="/root/.local/bin:$PATH"
+
+# Install system dependencies for GStreamer and other essentials
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    libgstreamer-plugins-bad1.0-dev \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    gstreamer1.0-tools \
+    gstreamer1.0-x \
+    gstreamer1.0-alsa \
+    gstreamer1.0-gl \
+    gstreamer1.0-gtk3 \
+    gstreamer1.0-qt5 \
+    gstreamer1.0-pulseaudio \
+    curl \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for fast package management (correct binary for target architecture)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Install Python dependencies using uv
+# Note: --system is used to install into the base image's Python (important for Jetson CUDA/TensorRT/OpenCV libs)
+RUN uv pip install --system \
+    ultralytics \
+    pymavlink \
+    opencv-python \
+    numpy==1.23.5
+
+# Set working directory
+WORKDIR /app
+
+# (Optional) Copy deployment scripts if they exist in the build context
+# COPY jetson/ /app/
+
+# Set default command
+CMD ["bash"]

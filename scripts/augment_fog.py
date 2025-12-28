@@ -310,10 +310,17 @@ def augment_dataset():
             continue
         
         pairs = get_image_label_pairs(split)
-        num_aug = int(len(pairs) * AUGMENT_PERCENTAGE)
+        
+        # Check if already augmented
+        existing_fog = list(img_dir.glob("*_fog.jpg"))
+        if len(existing_fog) >= int(len(pairs) * AUGMENT_PERCENTAGE):
+            print(f"\n📂 {split.upper()}: Already contains {len(existing_fog)} fog images. Skipping...")
+            continue
+            
+        num_aug = int(len(pairs) * AUGMENT_PERCENTAGE) - len(existing_fog)
         selected = random.sample(pairs, num_aug)
         
-        print(f"\n📂 {split.upper()}: {num_aug}/{len(pairs)} images")
+        print(f"\n📂 {split.upper()}: Adding {num_aug} more fog images (Total target: {int(len(pairs) * AUGMENT_PERCENTAGE)})")
         
         success = 0
         for img_path, label_path in tqdm(selected, desc=f"{split}"):
