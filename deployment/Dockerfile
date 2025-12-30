@@ -50,8 +50,8 @@ RUN uv pip uninstall --system opencv-python opencv-contrib-python || true && \
     # Build the wheel (this takes ~2 hours on Jetson Nano, but ONLY during the first build)
     python3 -m pip wheel . --verbose && \
     # Install the generated wheel
-    python3 -m pip install opencv_python*.whl
-# Note: rm -rf /tmp/opencv_build was removed per user request to keep build materials.
+    python3 -m pip install opencv_python*.whl && \
+    cd / && rm -rf /tmp/opencv_build
 
 # Install other Python dependencies using uv (Cached layer)
 RUN uv pip install --system \
@@ -62,6 +62,3 @@ RUN uv pip install --system \
 
 WORKDIR /app
 
-COPY . /app
-
-CMD ["python3", "test.py"]
