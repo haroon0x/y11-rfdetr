@@ -8,11 +8,12 @@ import cv2
 import os
 from math import radians, sin, cos, sqrt, atan2
 from datetime import datetime
+from gps_aware import TargetSelector, extract_detections_from_results
 
 RTSP_URL = 'rtsp://192.168.144.25:8554/main.264'
 SERIAL_PORT = '/dev/ttyUSB0'
 BAUD_RATE = 115200
-TARGET_ALTITUDE = 5.0
+TARGET_ALTITUDE = 6.0
 DESCEND_SPEED = 0.40
 HOLD_DURATION = 12
 INSPECTION_COOLDOWN = 10
@@ -169,17 +170,6 @@ def save_inspection_gps_frame(annotated_frame, inspection_count, lat, lon, alt):
         f"{DETECT_DIR}/inspection_gps_{inspection_count}_{timestamp}_{alt_str}.png", annotated_frame)
 
 
-def detect_person(results, conf_threshold):
-    for r in results:
-        if not r.boxes:
-            continue
-        for box in r.boxes:
-            if int(box.cls) == 0 and float(box.conf) > conf_threshold:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                px = (x1 + x2) // 2
-                py = (y1 + y2) // 2
-                return True, px, py
-    return False, None, None
 
 
 def compute_tracking_velocity(px, py, cx, cy, pid_x, pid_y, now, deadzone, vel_scale):
@@ -212,6 +202,10 @@ def main():
     pid_x = PID(PID_KP, PID_KD)
     pid_y = PID(PID_KP, PID_KD)
 
+    # Initialize GPS-Aware Target Selector
+    target_selector = TargetSelector()
+    current_target = None  # To store the selected target for tracking
+
     cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
     if not cap.isOpened():
         print("Error: Cannot open RTSP stream.")
@@ -228,7 +222,7 @@ def main():
         "inspection_count": 0,
         "reached_wp2": False,
         "wp2_pos": (None, None),  # (lat, lon)
-        "current_pos": {"lat": None, "lon": None, "alt": None},
+        "current_pos": {"lat": None, "lon": None, "alt": None, "heading": 0},
         "last_inspection_time": time.time() - 60,
         "inspection_start_time": 0,
         "last_person_seen": time.time(),
@@ -269,6 +263,8 @@ def main():
                     state["last_inspection_time"] = now - 60
                     state["gps_frame_captured"] = False
                     state["payload_dropped"] = False
+                    target_selector.reset()
+                    current_target = None
                     pid_x.reset()
                     pid_y.reset()
 
@@ -308,11 +304,15 @@ def main():
             h, w = state["frame"].shape[:2]
             cx, cy = w // 2, h // 2
 
-            msg = master.recv_match(type='GLOBAL_POSITION_INT', blocking=False)
             if msg:
                 state["current_pos"]["lat"] = msg.lat / 1e7
                 state["current_pos"]["lon"] = msg.lon / 1e7
                 state["current_pos"]["alt"] = msg.relative_alt * 0.001
+
+            # Get Heading from VFR_HUD
+            hud_msg = master.recv_match(type='VFR_HUD', blocking=False)
+            if hud_msg:
+                state["current_pos"]["heading"] = hud_msg.heading
 
             if (state["current_pos"]["lat"] and state["current_pos"]["lon"] and
                     not state["reached_wp2"] and state["wp2_pos"][0] is not None):
@@ -326,27 +326,61 @@ def main():
             results = model(state["frame"], imgsz=INFERENCE_SIZE, half=True, verbose=False)
             annotated_frame = results[0].plot()
 
-            person_detected, px, py = detect_person(results, CONF_THRESHOLD)
-            if person_detected:
+            detections = extract_detections_from_results(results, CONF_THRESHOLD)
+            
+            # Update last person seen time if any detections
+            if detections:
                 state["last_person_seen"] = now
 
             if state["mission_state"] == "MONITORING":
-                if (person_detected and state["reached_wp2"] and
+                if (detections and state["reached_wp2"] and
                     state["inspection_count"] < MAX_INSPECTIONS and
                         (now - state["last_inspection_time"] > INSPECTION_COOLDOWN)):
-                    print(f"Person {state['inspection_count'] + 1}/{MAX_INSPECTIONS} detected → inspection start")
-                    save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame1_init")
-                    set_mode(master, GUIDED_MODE)
-                    time.sleep(0.6)
-                    state["mission_state"] = "DESCENDING"
-                    state["inspection_start_time"] = now
-                    state["last_inspection_time"] = now
-                    state["gps_frame_captured"] = False
-                    state["payload_dropped"] = False
+                    
+                    # Select best target using GPS-aware logic
+                    if (state["current_pos"]["lat"] is not None and 
+                        state["current_pos"]["lon"] is not None and 
+                        state["current_pos"]["alt"] is not None):
+                        
+                        target = target_selector.select_target(
+                            detections,
+                            state["current_pos"]["lat"],
+                            state["current_pos"]["lon"],
+                            state["current_pos"]["alt"],
+                            state["current_pos"]["heading"],
+                            w, h
+                        )
+                        
+                        if target:
+                            print(f"Person {state['inspection_count'] + 1}/{MAX_INSPECTIONS} selected → inspection start")
+                            current_target = target
+                            save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame1_init")
+                            set_mode(master, GUIDED_MODE)
+                            time.sleep(0.6)
+                            state["mission_state"] = "DESCENDING"
+                            state["inspection_start_time"] = now
+                            state["last_inspection_time"] = now
+                            state["gps_frame_captured"] = False
+                            state["payload_dropped"] = False
 
             elif state["mission_state"] == "DESCENDING":
-                vx, vy = compute_tracking_velocity(px, py, cx, cy, pid_x, pid_y,
-                                                   now, DEADZONE, VEL_SCALE)
+                # Track the nearest detection during descent
+                if detections:
+                    # Find detection closest to screen center
+                    min_dist = float('inf')
+                    px, py = detections[0].px, detections[0].py # Default to first
+                    
+                    for det in detections:
+                        dist = (det.px - cx)**2 + (det.py - cy)**2
+                        if dist < min_dist:
+                            min_dist = dist
+                            px, py = det.px, det.py
+                    
+                    vx, vy = compute_tracking_velocity(px, py, cx, cy, pid_x, pid_y,
+                                                    now, DEADZONE, VEL_SCALE)
+                else:
+                    vx, vy = 0.0, 0.0 # No detection, hold horizontal position
+                
                 send_body_velocity(master, vx, vy, DESCEND_SPEED, 0.0)
 
                 if state["current_pos"]["alt"] and state["current_pos"]["alt"] <= TARGET_ALTITUDE + 0.35:
@@ -355,8 +389,24 @@ def main():
                     state["mission_state"] = "HOLDING"
 
             elif state["mission_state"] == "HOLDING":
-                vx, vy = compute_tracking_velocity(px, py, cx, cy, pid_x, pid_y,
-                                                   now, DEADZONE, VEL_SCALE)
+                if detections:
+                    # Find detection closest to center
+                    min_dist = float('inf')
+                    px, py = None, None
+                    for det in detections:
+                        dist = (det.px - cx)**2 + (det.py - cy)**2
+                        if dist < min_dist:
+                            min_dist = dist
+                            px, py = det.px, det.py
+                            
+                    if px is not None:
+                        vx, vy = compute_tracking_velocity(px, py, cx, cy, pid_x, pid_y,
+                                                        now, DEADZONE, VEL_SCALE)
+                    else:
+                        vx, vy = 0.0, 0.0
+                else:
+                    vx, vy = 0.0, 0.0
+
                 send_body_velocity(master, vx, vy, 0.0, 0.0)
 
                 if now - state["last_person_seen"] > PERSON_TIMEOUT:
@@ -371,6 +421,14 @@ def main():
                             current_channel = SERVO_CHANNELS[state["inspection_count"]]
                             trigger_payload_drop(master, current_channel)
                             save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame3_drop")
+                            
+                            # Mark the target location as served
+                            if current_target:
+                                if (state["current_pos"]["lat"] is not None and 
+                                    state["current_pos"]["lon"] is not None):
+                                    target_selector.mark_served(state["current_pos"]["lat"], state["current_pos"]["lon"])
+                                else:
+                                    target_selector.mark_served(current_target.lat, current_target.lon)
                         state["payload_dropped"] = True
 
                     state["inspection_count"] += 1
