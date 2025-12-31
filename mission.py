@@ -17,7 +17,7 @@ TARGET_ALTITUDE = 6.0
 DESCEND_SPEED = 0.40
 HOLD_DURATION = 12
 INSPECTION_COOLDOWN = 10
-MAX_INSPECTIONS = 5
+MAX_INSPECTIONS = 2
 WP2_TOLERANCE = 5.0
 PID_KP = 0.82
 PID_KD = 0.42
@@ -155,7 +155,6 @@ def get_waypoint_2(mission_items):
 def save_detection_frame(frame, annotated_frame, altitude, prefix="det"):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     alt_str = f"{altitude:.1f}m" if altitude is not None else "alt_unknown"
-    cv2.imwrite(f"{DETECT_DIR}/{prefix}_{timestamp}_{alt_str}.png", frame)
     cv2.imwrite(f"{DETECT_DIR}/{prefix}_annotated_{timestamp}_{alt_str}.png", annotated_frame)
 
 
@@ -229,6 +228,7 @@ def main():
         "last_loop_time": time.time(),
         "gps_frame_captured": False,
         "payload_dropped": False,
+        "holding_frame_captured": False,
         "frame": np.zeros((480, 640, 3), np.uint8)
     }
 
@@ -263,6 +263,7 @@ def main():
                     state["last_inspection_time"] = now - 60
                     state["gps_frame_captured"] = False
                     state["payload_dropped"] = False
+                    state["holding_frame_captured"] = False
                     target_selector.reset()
                     current_target = None
                     pid_x.reset()
@@ -362,6 +363,7 @@ def main():
                             state["last_inspection_time"] = now
                             state["gps_frame_captured"] = False
                             state["payload_dropped"] = False
+                            state["holding_frame_captured"] = False
 
             elif state["mission_state"] == "DESCENDING":
                 # Track the nearest detection during descent
@@ -409,6 +411,11 @@ def main():
 
                 send_body_velocity(master, vx, vy, 0.0, 0.0)
 
+                # Save a frame mid-hold (observability improvement)
+                if not state["holding_frame_captured"] and (now - state["inspection_start_time"] > 3.0):
+                    save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame3_hold")
+                    state["holding_frame_captured"] = True
+
                 if now - state["last_person_seen"] > PERSON_TIMEOUT:
                     print("Person lost → back to AUTO")
                     set_mode(master, AUTO_MODE)
@@ -420,7 +427,7 @@ def main():
                         if state["inspection_count"] < len(SERVO_CHANNELS):
                             current_channel = SERVO_CHANNELS[state["inspection_count"]]
                             trigger_payload_drop(master, current_channel)
-                            save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame3_drop")
+                            save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame4_drop")
                             
                             # Mark the target location as served
                             if current_target:
