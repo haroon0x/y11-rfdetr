@@ -4,6 +4,7 @@ import time
 import numpy as np
 from pymavlink import mavutil
 from ultralytics import YOLO
+from rc_controller import DroneRCController
 import cv2
 import os
 from math import radians, sin, cos, sqrt, atan2
@@ -185,9 +186,11 @@ def compute_tracking_velocity(px, py, cx, cy, pid_x, pid_y, now, deadzone, vel_s
 
 def main():
     print("Connecting to vehicle...")
-    master = mavutil.mavlink_connection(SERIAL_PORT, baud=BAUD_RATE)
-    master.wait_heartbeat(timeout=20)
-    print("Connected.")
+    rc_controller = DroneRCController(SERIAL_PORT, baud_rate=BAUD_RATE, max_loop_rate=MAX_LOOP_RATE)
+    if not rc_controller.connect():
+        print("Failed to connect.")
+        return
+    master = rc_controller.master
 
     AUTO_MODE = master.mode_mapping().get('AUTO', 3)
     GUIDED_MODE = master.mode_mapping().get('GUIDED', 4)
@@ -232,241 +235,226 @@ def main():
         "frame": np.zeros((480, 640, 3), np.uint8)
     }
 
-    try:
-        while True:
-            now = time.time()
-            if now - state["last_loop_time"] < 1.0 / MAX_LOOP_RATE:
-                time.sleep(0.015)
-                continue
-            state["last_loop_time"] = now
-
-            rc_msg = master.recv_match(type='RC_CHANNELS', blocking=False, timeout=0.01)
-            rc_chan10 = 0
-            if rc_msg:
-                channels = [
-                    rc_msg.chan1_raw, rc_msg.chan2_raw, rc_msg.chan3_raw, rc_msg.chan4_raw,
-                    rc_msg.chan5_raw, rc_msg.chan6_raw, rc_msg.chan7_raw, rc_msg.chan8_raw,
-                    rc_msg.chan9_raw, rc_msg.chan10_raw, rc_msg.chan11_raw, rc_msg.chan12_raw,
-                    rc_msg.chan13_raw, rc_msg.chan14_raw, rc_msg.chan15_raw, rc_msg.chan16_raw,
-                    rc_msg.chan17_raw, rc_msg.chan18_raw
-                ]
-                if len(channels) >= RC_SURVEILLANCE_CHANNEL:
-                    rc_chan10 = channels[RC_SURVEILLANCE_CHANNEL - 1]
-
-            if rc_chan10 > RC_HIGH_THRESHOLD:
-                if not state["system_active"]:
-                    print("RC Channel 10 HIGH → SYSTEM ACTIVATED")
-                    state["system_active"] = True
-                    state["reached_wp2"] = False
-                    state["inspection_count"] = 0
-                    state["mission_state"] = "MONITORING"
-                    state["last_inspection_time"] = now - 60
-                    state["gps_frame_captured"] = False
-                    state["payload_dropped"] = False
-                    state["holding_frame_captured"] = False
-                    target_selector.reset()
-                    current_target = None
-                    pid_x.reset()
-                    pid_y.reset()
-
-                    print("Downloading mission for Waypoint 2...")
-                    mission_items = download_mission(master)
-                    wp2_lat, wp2_lon = get_waypoint_2(mission_items)
-                    state["wp2_pos"] = (wp2_lat, wp2_lon)
-
-                    if wp2_lat is not None:
-                        print(f"Waypoint 2 loaded: Lat={wp2_lat:.7f}, Lon={wp2_lon:.7f}")
-                    else:
-                        print("ERROR: Waypoint 2 not found!")
-            else:
-                if state["system_active"]:
-                    print("RC Channel 10 LOW → SYSTEM STOPPED")
-                    state["system_active"] = False
-                    if state["mission_state"] != "MONITORING":
-                        set_mode(master, AUTO_MODE)
-                        send_body_velocity(master)
-
+    def mission_callback(controller, rc_msg, dt):
+        master = controller.master
+        now = time.time()
+        
+        # Safe RC Channel Reading
+        ch10_value = controller.get_channel_value(RC_SURVEILLANCE_CHANNEL, rc_msg)
+        
+        if controller.is_channel_high(ch10_value, RC_HIGH_THRESHOLD):
             if not state["system_active"]:
-                cv2.putText(state["frame"], "SYSTEM OFF - Flip Ch10 HIGH to start", (50, 100),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
-                cv2.imshow("YOLO11 Person Inspection", state["frame"])
-                cv2.waitKey(1)
-                continue
+                print("RC Channel 10 HIGH → SYSTEM ACTIVATED")
+                state["system_active"] = True
+                state["reached_wp2"] = False
+                state["inspection_count"] = 0
+                state["mission_state"] = "MONITORING"
+                state["last_inspection_time"] = now - 60
+                state["gps_frame_captured"] = False
+                state["payload_dropped"] = False
+                state["holding_frame_captured"] = False
+                target_selector.reset()
+                current_target = None
+                pid_x.reset()
+                pid_y.reset()
 
-            ret, frame = cap.read()
-            if not ret:
-                print("Frame read failed - reconnecting...")
-                cap.release()
-                cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
-                time.sleep(1.5)
-                continue
-            state["frame"] = frame
+                print("Downloading mission for Waypoint 2...")
+                mission_items = download_mission(master)
+                wp2_lat, wp2_lon = get_waypoint_2(mission_items)
+                state["wp2_pos"] = (wp2_lat, wp2_lon)
 
-            h, w = state["frame"].shape[:2]
-            cx, cy = w // 2, h // 2
+                if wp2_lat is not None:
+                    print(f"Waypoint 2 loaded: Lat={wp2_lat:.7f}, Lon={wp2_lon:.7f}")
+                else:
+                    print("ERROR: Waypoint 2 not found!")
+        else:
+            if state["system_active"]:
+                print("RC Channel 10 LOW → SYSTEM STOPPED")
+                state["system_active"] = False
+                if state["mission_state"] != "MONITORING":
+                    set_mode(master, AUTO_MODE)
+                    send_body_velocity(master)
 
-            if msg:
-                state["current_pos"]["lat"] = msg.lat / 1e7
-                state["current_pos"]["lon"] = msg.lon / 1e7
-                state["current_pos"]["alt"] = msg.relative_alt * 0.001
+        if not state["system_active"]:
+            # Minimal feedback when system is OFF
+            # (Note: cv2 UI skipped here as it's meant for headless or minimal overlay)
+            return True
 
-            # Get Heading from VFR_HUD
-            hud_msg = master.recv_match(type='VFR_HUD', blocking=False)
-            if hud_msg:
-                state["current_pos"]["heading"] = hud_msg.heading
+        ret, frame = cap.read()
+        if not ret:
+            print("Frame read failed - reconnecting...")
+            # Reconnection logic is handled externally or within mission_callback if needed
+            # but for now we try to keep going
+            return True
+        state["frame"] = frame
 
-            if (state["current_pos"]["lat"] and state["current_pos"]["lon"] and
-                    not state["reached_wp2"] and state["wp2_pos"][0] is not None):
-                distance = haversine_distance(
-                    state["current_pos"]["lat"], state["current_pos"]["lon"],
-                    state["wp2_pos"][0], state["wp2_pos"][1])
-                if distance <= WP2_TOLERANCE:
-                    state["reached_wp2"] = True
-                    print(f"Reached Waypoint 2 – inspection zone active!")
+        h, w = state["frame"].shape[:2]
+        cx, cy = w // 2, h // 2
 
-            results = model(state["frame"], imgsz=INFERENCE_SIZE, half=True, verbose=False)
-            annotated_frame = results[0].plot()
+        # Get GPS Data
+        msg = master.recv_match(type='GLOBAL_POSITION_INT', blocking=False)
+        if msg:
+            state["current_pos"]["lat"] = msg.lat / 1e7
+            state["current_pos"]["lon"] = msg.lon / 1e7
+            state["current_pos"]["alt"] = msg.relative_alt * 0.001
 
-            detections = extract_detections_from_results(results, CONF_THRESHOLD)
-            
-            # Update last person seen time if any detections
+        # Get Heading from VFR_HUD
+        hud_msg = master.recv_match(type='VFR_HUD', blocking=False)
+        if hud_msg:
+            state["current_pos"]["heading"] = hud_msg.heading
+
+        if (state["current_pos"]["lat"] and state["current_pos"]["lon"] and
+                not state["reached_wp2"] and state["wp2_pos"][0] is not None):
+            distance = haversine_distance(
+                state["current_pos"]["lat"], state["current_pos"]["lon"],
+                state["wp2_pos"][0], state["wp2_pos"][1])
+            if distance <= WP2_TOLERANCE:
+                state["reached_wp2"] = True
+                print(f"Reached Waypoint 2 – inspection zone active!")
+
+        results = model(state["frame"], imgsz=INFERENCE_SIZE, half=True, verbose=False)
+        annotated_frame = results[0].plot()
+
+        detections = extract_detections_from_results(results, CONF_THRESHOLD)
+        
+        # Update last person seen time if any detections
+        if detections:
+            state["last_person_seen"] = now
+
+        if state["mission_state"] == "MONITORING":
+            if (detections and state["reached_wp2"] and
+                state["inspection_count"] < MAX_INSPECTIONS and
+                    (now - state["last_inspection_time"] > INSPECTION_COOLDOWN)):
+                
+                # Select best target using GPS-aware logic
+                if (state["current_pos"]["lat"] is not None and 
+                    state["current_pos"]["lon"] is not None and 
+                    state["current_pos"]["alt"] is not None):
+                    
+                    target = target_selector.select_target(
+                        detections,
+                        state["current_pos"]["lat"],
+                        state["current_pos"]["lon"],
+                        state["current_pos"]["alt"],
+                        state["current_pos"]["heading"],
+                        w, h
+                    )
+                    
+                    if target:
+                        print(f"Person {state['inspection_count'] + 1}/{MAX_INSPECTIONS} selected → inspection start")
+                        nonlocal current_target
+                        current_target = target
+                        save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame1_init")
+                        set_mode(master, GUIDED_MODE)
+                        time.sleep(0.6)
+                        state["mission_state"] = "DESCENDING"
+                        state["inspection_start_time"] = now
+                        state["last_inspection_time"] = now
+                        state["gps_frame_captured"] = False
+                        state["payload_dropped"] = False
+                        state["holding_frame_captured"] = False
+
+        elif state["mission_state"] == "DESCENDING":
+            # Track the nearest detection during descent
             if detections:
-                state["last_person_seen"] = now
+                # Find detection closest to screen center
+                min_dist = float('inf')
+                px, py = detections[0].px, detections[0].py # Default to first
+                
+                for det in detections:
+                    dist = (det.px - cx)**2 + (det.py - cy)**2
+                    if dist < min_dist:
+                        min_dist = dist
+                        px, py = det.px, det.py
+                
+                vx, vy = compute_tracking_velocity(px, py, cx, cy, pid_x, pid_y,
+                                                now, DEADZONE, VEL_SCALE)
+            else:
+                vx, vy = 0.0, 0.0 # No detection, hold horizontal position
+            
+            send_body_velocity(master, vx, vy, DESCEND_SPEED, 0.0)
 
-            if state["mission_state"] == "MONITORING":
-                if (detections and state["reached_wp2"] and
-                    state["inspection_count"] < MAX_INSPECTIONS and
-                        (now - state["last_inspection_time"] > INSPECTION_COOLDOWN)):
-                    
-                    # Select best target using GPS-aware logic
-                    if (state["current_pos"]["lat"] is not None and 
-                        state["current_pos"]["lon"] is not None and 
-                        state["current_pos"]["alt"] is not None):
-                        
-                        target = target_selector.select_target(
-                            detections,
-                            state["current_pos"]["lat"],
-                            state["current_pos"]["lon"],
-                            state["current_pos"]["alt"],
-                            state["current_pos"]["heading"],
-                            w, h
-                        )
-                        
-                        if target:
-                            print(f"Person {state['inspection_count'] + 1}/{MAX_INSPECTIONS} selected → inspection start")
-                            current_target = target
-                            save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame1_init")
-                            set_mode(master, GUIDED_MODE)
-                            time.sleep(0.6)
-                            state["mission_state"] = "DESCENDING"
-                            state["inspection_start_time"] = now
-                            state["last_inspection_time"] = now
-                            state["gps_frame_captured"] = False
-                            state["payload_dropped"] = False
-                            state["holding_frame_captured"] = False
+            if state["current_pos"]["alt"] and state["current_pos"]["alt"] <= TARGET_ALTITUDE + 0.35:
+                print("Reached Target Altitude → HOLDING")
+                save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame2_alt")
+                state["mission_state"] = "HOLDING"
 
-            elif state["mission_state"] == "DESCENDING":
-                # Track the nearest detection during descent
-                if detections:
-                    # Find detection closest to screen center
-                    min_dist = float('inf')
-                    px, py = detections[0].px, detections[0].py # Default to first
-                    
-                    for det in detections:
-                        dist = (det.px - cx)**2 + (det.py - cy)**2
-                        if dist < min_dist:
-                            min_dist = dist
-                            px, py = det.px, det.py
-                    
+        elif state["mission_state"] == "HOLDING":
+            if detections:
+                # Find detection closest to center
+                min_dist = float('inf')
+                px, py = None, None
+                for det in detections:
+                    dist = (det.px - cx)**2 + (det.py - cy)**2
+                    if dist < min_dist:
+                        min_dist = dist
+                        px, py = det.px, det.py
+                        
+                if px is not None:
                     vx, vy = compute_tracking_velocity(px, py, cx, cy, pid_x, pid_y,
                                                     now, DEADZONE, VEL_SCALE)
                 else:
-                    vx, vy = 0.0, 0.0 # No detection, hold horizontal position
-                
-                send_body_velocity(master, vx, vy, DESCEND_SPEED, 0.0)
-
-                if state["current_pos"]["alt"] and state["current_pos"]["alt"] <= TARGET_ALTITUDE + 0.35:
-                    print("Reached Target Altitude → HOLDING")
-                    save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame2_alt")
-                    state["mission_state"] = "HOLDING"
-
-            elif state["mission_state"] == "HOLDING":
-                if detections:
-                    # Find detection closest to center
-                    min_dist = float('inf')
-                    px, py = None, None
-                    for det in detections:
-                        dist = (det.px - cx)**2 + (det.py - cy)**2
-                        if dist < min_dist:
-                            min_dist = dist
-                            px, py = det.px, det.py
-                            
-                    if px is not None:
-                        vx, vy = compute_tracking_velocity(px, py, cx, cy, pid_x, pid_y,
-                                                        now, DEADZONE, VEL_SCALE)
-                    else:
-                        vx, vy = 0.0, 0.0
-                else:
                     vx, vy = 0.0, 0.0
+            else:
+                vx, vy = 0.0, 0.0
 
-                send_body_velocity(master, vx, vy, 0.0, 0.0)
+            send_body_velocity(master, vx, vy, 0.0, 0.0)
 
-                # Save a frame mid-hold (observability improvement)
-                if not state["holding_frame_captured"] and (now - state["inspection_start_time"] > 3.0):
-                    save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame3_hold")
-                    state["holding_frame_captured"] = True
+            # Save a frame mid-hold (observability improvement)
+            if not state["holding_frame_captured"] and (now - state["inspection_start_time"] > 3.0):
+                save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame3_hold")
+                state["holding_frame_captured"] = True
 
-                if now - state["last_person_seen"] > PERSON_TIMEOUT:
-                    print("Person lost → back to AUTO")
+            if now - state["last_person_seen"] > PERSON_TIMEOUT:
+                print("Person lost → back to AUTO")
+                set_mode(master, AUTO_MODE)
+                state["last_inspection_time"] = now
+                state["mission_state"] = "MONITORING"
+
+            if now - state["inspection_start_time"] > HOLD_DURATION:
+                if not state["payload_dropped"]:
+                    if state["inspection_count"] < len(SERVO_CHANNELS):
+                        current_channel = SERVO_CHANNELS[state["inspection_count"]]
+                        trigger_payload_drop(master, current_channel)
+                        save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame4_drop")
+                        
+                        # Mark the target location as served
+                        if current_target:
+                            if (state["current_pos"]["lat"] is not None and 
+                                state["current_pos"]["lon"] is not None):
+                                target_selector.mark_served(state["current_pos"]["lat"], state["current_pos"]["lon"])
+                            else:
+                                target_selector.mark_served(current_target.lat, current_target.lon)
+                    state["payload_dropped"] = True
+
+                state["inspection_count"] += 1
+                print(f"Inspection {state['inspection_count']}/{MAX_INSPECTIONS} complete")
+
+                if (not state["gps_frame_captured"] and
+                        state["current_pos"]["lat"] and state["current_pos"]["lon"]):
+                    save_inspection_gps_frame(annotated_frame, state["inspection_count"],
+                                              state["current_pos"]["lat"], state["current_pos"]["lon"],
+                                              state["current_pos"]["alt"])
+                    state["gps_frame_captured"] = True
+
+                if state["inspection_count"] >= MAX_INSPECTIONS:
+                    print("Max inspections reached → RTL")
+                    set_mode(master, RTL_MODE)
+                    state["mission_state"] = "RTL"
+                else:
                     set_mode(master, AUTO_MODE)
                     state["last_inspection_time"] = now
                     state["mission_state"] = "MONITORING"
 
-                if now - state["inspection_start_time"] > HOLD_DURATION:
-                    if not state["payload_dropped"]:
-                        if state["inspection_count"] < len(SERVO_CHANNELS):
-                            current_channel = SERVO_CHANNELS[state["inspection_count"]]
-                            trigger_payload_drop(master, current_channel)
-                            save_detection_frame(state["frame"], annotated_frame, state["current_pos"]["alt"], prefix="frame4_drop")
-                            
-                            # Mark the target location as served
-                            if current_target:
-                                if (state["current_pos"]["lat"] is not None and 
-                                    state["current_pos"]["lon"] is not None):
-                                    target_selector.mark_served(state["current_pos"]["lat"], state["current_pos"]["lon"])
-                                else:
-                                    target_selector.mark_served(current_target.lat, current_target.lon)
-                        state["payload_dropped"] = True
+        status = f"System: {'ON' if state['system_active'] else 'OFF'} | State: {state['mission_state']} | Inspections: {state['inspection_count']}/{MAX_INSPECTIONS}"
+        if state["system_active"] and not state["reached_wp2"]:
+            status += " | Waiting for WP2"
 
-                    state["inspection_count"] += 1
-                    print(f"Inspection {state['inspection_count']}/{MAX_INSPECTIONS} complete")
+        print(f"[STATUS] {status}") # Console status instead of cv2 window
+        return True
 
-                    if (not state["gps_frame_captured"] and
-                            state["current_pos"]["lat"] and state["current_pos"]["lon"]):
-                        save_inspection_gps_frame(annotated_frame, state["inspection_count"],
-                                                  state["current_pos"]["lat"], state["current_pos"]["lon"],
-                                                  state["current_pos"]["alt"])
-                        state["gps_frame_captured"] = True
-
-                    if state["inspection_count"] >= MAX_INSPECTIONS:
-                        print("Max inspections reached → RTL")
-                        set_mode(master, RTL_MODE)
-                        state["mission_state"] = "RTL"
-                    else:
-                        set_mode(master, AUTO_MODE)
-                        state["last_inspection_time"] = now
-                        state["mission_state"] = "MONITORING"
-
-            status = f"System: {'ON' if state['system_active'] else 'OFF'} | State: {state['mission_state']} | Inspections: {state['inspection_count']}/{MAX_INSPECTIONS}"
-            if state["system_active"] and not state["reached_wp2"]:
-                status += " | Waiting for WP2"
-
-            cv2.putText(annotated_frame, status, (20, 50),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
-            cv2.imshow("YOLO11 Person Inspection", annotated_frame)
-
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+    try:
+        rc_controller.run_loop(mission_callback)
 
     except KeyboardInterrupt:
         print("\nStopped by user")
