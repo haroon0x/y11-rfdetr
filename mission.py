@@ -11,7 +11,7 @@ from datetime import datetime
 from gps_aware import TargetSelector, extract_detections_from_results
 
 RTSP_URL = 'rtsp://192.168.144.25:8554/main.264'
-SERIAL_PORT = '/dev/ttyUSB0'
+SERIAL_PORT = '/dev/ttyACM0'
 BAUD_RATE = 115200
 TARGET_ALTITUDE = 6.0
 DESCEND_SPEED = 0.40
